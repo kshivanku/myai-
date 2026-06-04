@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Webcam Jigsaw</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="stage" aria-label="Webcam jigsaw puzzle">
+        <div class="background-type" aria-hidden="true">
+          <span>twin</span>
+        </div>
+        <video id="webcam" autoplay playsinline muted></video>
+        <div id="puzzleStage" class="puzzle-stage">
+          <div id="slotLayer" class="slot-layer"></div>
+          <div id="piecesLayer" class="pieces-layer"></div>
+        </div>
+        <div class="empty-state" id="emptyState">
+          <h1>Webcam Jigsaw</h1>
+          <p>Allow camera access to start the puzzle.</p>
+        </div>
+        <div class="status-pill" id="statusText">Requesting camera...</div>
+      </section>
+    </main>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
