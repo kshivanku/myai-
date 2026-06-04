@@ -32,30 +32,6 @@ body {
   background: #090b0d;
 }
 
-.background-type {
-  position: absolute;
-  inset: -2vh 0 0;
-  z-index: 0;
-  display: grid;
-  align-content: center;
-  gap: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.background-type span {
-  display: block;
-  color: rgba(255, 255, 255, 0.075);
-  font-size: clamp(8rem, 22vw, 24rem);
-  font-weight: 900;
-  line-height: 0.76;
-  letter-spacing: 0;
-  text-transform: uppercase;
-  white-space: nowrap;
-  transform: scaleX(1.08);
-  transform-origin: center;
-}
-
 video {
   position: absolute;
   width: 1px;
@@ -65,7 +41,7 @@ video {
 }
 
 .puzzle-stage,
-.empty-state {
+.title-screen {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -117,35 +93,162 @@ video {
   z-index: 1;
 }
 
-.empty-state {
+.title-screen {
   z-index: 2;
   display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 10px;
-  padding: 28px;
-  text-align: center;
-  background:
-    radial-gradient(circle at 50% 42%, rgba(112, 214, 165, 0.16), transparent 34%),
-    #090b0d;
+  place-items: center;
+  background: #000;
 }
 
-.empty-state.is-hidden {
+.title-screen.is-hidden {
   display: none;
 }
 
-.empty-state h1 {
-  margin: 0;
-  font-size: clamp(2.5rem, 7vw, 7rem);
-  line-height: 0.95;
-  letter-spacing: 0;
+.poster {
+  position: relative;
+  width: min(44vw, 560px);
+  height: 100vh;
+  min-width: 340px;
+  overflow: hidden;
+  background: transparent;
 }
 
-.empty-state p {
-  margin: 0;
-  max-width: 36rem;
-  color: var(--muted);
-  font-size: 1.05rem;
+.poster::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #ff120d;
+  transform: scaleY(0);
+  transform-origin: top;
+  animation: posterDrop 760ms cubic-bezier(0.77, 0, 0.175, 1) forwards;
+}
+
+.poster-top,
+.poster-bottom {
+  position: absolute;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  color: #000;
+  font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: clamp(5rem, 9.5vw, 140px);
+  line-height: 0.78;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+  transform: translateX(-50%);
+  overflow: hidden;
+}
+
+.poster-top {
+  top: 4vh;
+  animation-delay: 620ms;
+}
+
+.poster-bottom {
+  bottom: 4vh;
+  transform: translateX(-50%) rotate(180deg);
+  animation-delay: 760ms;
+}
+
+.poster span {
+  display: block;
+  opacity: 0;
+}
+
+.poster-top span:first-child,
+.poster-bottom span:first-child {
+  animation: wordSlideUp 720ms cubic-bezier(0.77, 0, 0.175, 1) forwards;
+  animation-delay: 620ms;
+}
+
+.poster-top span:last-child,
+.poster-bottom span:last-child {
+  animation: wordSlideDown 720ms cubic-bezier(0.77, 0, 0.175, 1) forwards;
+  animation-delay: 720ms;
+}
+
+.launch-button {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 3;
+  transform: translate(-50%, -50%);
+  min-width: 174px;
+  min-height: 72px;
+  padding: 0 36px;
+  border: 0;
+  border-radius: 32px;
+  background: #000;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.45rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: buttonRise 420ms ease-out 1180ms forwards;
+}
+
+.launch-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+@keyframes posterDrop {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes wordSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(0.7em);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes wordSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-0.7em);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes buttonRise {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -44%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@media (max-width: 760px) {
+  .poster {
+    width: 100vw;
+    min-width: 0;
+  }
+
+  .poster-top,
+  .poster-bottom {
+    font-size: clamp(4rem, 20vw, 8.5rem);
+    line-height: 0.86;
+  }
 }
 
 .status-pill {
@@ -163,4 +266,8 @@ video {
   font-size: 0.9rem;
   backdrop-filter: blur(10px);
   white-space: nowrap;
+}
+
+.status-pill.is-hidden {
+  display: none;
 }

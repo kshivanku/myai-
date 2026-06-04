@@ -3,7 +3,8 @@ const puzzleStage = document.querySelector("#puzzleStage");
 const slotLayer = document.querySelector("#slotLayer");
 const piecesLayer = document.querySelector("#piecesLayer");
 const statusText = document.querySelector("#statusText");
-const emptyState = document.querySelector("#emptyState");
+const titleScreen = document.querySelector("#titleScreen");
+const launchButton = document.querySelector("#launchButton");
 
 let stream;
 let animationFrame;
@@ -17,13 +18,14 @@ let roundIndex = 0;
 let finalComplete = false;
 const rounds = [
   { rows: 3, cols: 4, shape: "jigsaw" },
-  { rows: 4, cols: 5, shape: "rect" },
-  { rows: 5, cols: 6, shape: "rect" }
+  { rows: 10, cols: 10, shape: "rect" }
 ];
 
 async function startWebcam() {
   try {
+    launchButton.disabled = true;
     statusText.textContent = "Requesting camera...";
+    statusText.classList.remove("is-hidden");
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: "user",
@@ -35,14 +37,12 @@ async function startWebcam() {
 
     video.srcObject = stream;
     await video.play();
-    emptyState.classList.add("is-hidden");
     roundIndex = 0;
     finalComplete = false;
-    statusText.textContent = roundLabel();
-    createPuzzle();
-    drawLoop();
+    launchCurrentRound();
   } catch (error) {
     statusText.textContent = "Camera permission needed. Refresh to try again.";
+    launchButton.disabled = false;
     console.error(error);
   }
 }
@@ -64,8 +64,18 @@ function stopWebcam() {
   }
 
   video.srcObject = null;
-  emptyState.classList.remove("is-hidden");
+  showTitleScreen("Practice");
   statusText.textContent = "Ready";
+}
+
+function launchCurrentRound() {
+  titleScreen.classList.add("is-hidden");
+  statusText.classList.remove("is-hidden");
+  launchButton.disabled = false;
+  statusText.textContent = roundLabel();
+  cancelAnimationFrame(animationFrame);
+  createPuzzle();
+  drawLoop();
 }
 
 function createPuzzle() {
@@ -519,7 +529,7 @@ function updateStats() {
 }
 
 function rebuildIfRunning() {
-  if (!stream || finalComplete) return;
+  if (!stream || finalComplete || !titleScreen.classList.contains("is-hidden")) return;
   cancelAnimationFrame(animationFrame);
   createPuzzle();
   drawLoop();
@@ -533,18 +543,14 @@ function completeRound() {
   }
 
   roundIndex += 1;
-  statusText.textContent = `Next round: ${roundLabel()}`;
-  window.setTimeout(() => {
-    if (!stream) return;
-    cancelAnimationFrame(animationFrame);
-    createPuzzle();
-    drawLoop();
-  }, 900);
+  cancelAnimationFrame(animationFrame);
+  statusText.classList.add("is-hidden");
+  showTitleScreen("Create");
 }
 
 function roundLabel() {
   const round = rounds[roundIndex];
-  return `Round ${roundIndex + 1}/3 · ${round.rows} x ${round.cols}`;
+  return `Round ${roundIndex + 1}/${rounds.length} · ${round.rows} x ${round.cols}`;
 }
 
 function randomBetween(min, max) {
@@ -567,5 +573,29 @@ function sketchNoise(index, pass, salt) {
   return (hash(index * 19.19 + pass * 53.53 + salt * 7.17) - 0.5) * 2;
 }
 
+function showTitleScreen(label) {
+  launchButton.textContent = label;
+  launchButton.disabled = false;
+  titleScreen.classList.remove("is-hidden");
+  const poster = titleScreen.querySelector(".poster");
+  poster.style.animation = "none";
+  void poster.offsetWidth;
+  poster.style.animation = "";
+  for (const animated of titleScreen.querySelectorAll(".poster span, .launch-button")) {
+    animated.style.animation = "none";
+    void animated.offsetWidth;
+    animated.style.animation = "";
+  }
+  titleScreen.classList.remove("is-hidden");
+}
+
+function handleLaunch() {
+  if (stream) {
+    launchCurrentRound();
+  } else {
+    startWebcam();
+  }
+}
+
 window.addEventListener("resize", rebuildIfRunning);
-startWebcam();
+launchButton.addEventListener("click", handleLaunch);
