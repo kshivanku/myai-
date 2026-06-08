@@ -145,17 +145,19 @@ function createPuzzle() {
   piecesLayer.innerHTML = "";
   updateSlotLayerClip();
 
-  const pieceWidth = board.width / cols;
-  const pieceHeight = board.height / rows;
-  const tabSize = isRectRound ? 0 : Math.min(pieceWidth, pieceHeight) * 0.18;
+  const colTracks = createVariedTracks(cols, board.width);
+  const rowTracks = createVariedTracks(rows, board.height);
   const edges = createEdges(rows, cols);
   const sourceCells = createEyeSwappedSourceCells(rows, cols);
 
   for (let row = 0; row < rows; row += 1) {
     for (let col = 0; col < cols; col += 1) {
       const sourceCell = sourceCells[row * cols + col];
-      const targetX = board.x + col * pieceWidth;
-      const targetY = board.y + row * pieceHeight;
+      const pieceWidth = colTracks[col].size;
+      const pieceHeight = rowTracks[row].size;
+      const tabSize = isRectRound ? 0 : Math.min(pieceWidth, pieceHeight) * 0.18;
+      const targetX = board.x + colTracks[col].start;
+      const targetY = board.y + rowTracks[row].start;
       const slot = document.createElement("div");
       slot.className = "slot";
       slot.style.left = `${targetX}px`;
@@ -200,7 +202,18 @@ function createPuzzle() {
         targetX: targetX - tabSize,
         targetY: targetY - tabSize,
         assignedSlot: slotData,
-        sourceBounds: getPieceSourceBounds(sourceCell.row, sourceCell.col, rows, cols, faceLayout?.source, tabSize, pieceWidth, pieceHeight),
+        sourceBounds: getPieceSourceBounds(
+          sourceCell.row,
+          sourceCell.col,
+          rows,
+          cols,
+          faceLayout?.source,
+          tabSize,
+          pieceWidth,
+          pieceHeight,
+          rowTracks,
+          colTracks
+        ),
         x: 0,
         y: 0,
         placed: false,
@@ -237,6 +250,21 @@ function createEdges(rows, cols) {
   }
 
   return { horizontal, vertical };
+}
+
+function createVariedTracks(count, totalSize) {
+  const variation = 0.24;
+  const weights = Array.from({ length: count }, (_, index) => 1 + sketchNoise(index, count, 31) * variation);
+  const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
+  let cursor = 0;
+
+  return weights.map((weight, index) => {
+    const remaining = totalSize - cursor;
+    const size = index === count - 1 ? remaining : (weight / weightTotal) * totalSize;
+    const track = { start: cursor, size };
+    cursor += size;
+    return track;
+  });
 }
 
 function createEyeSwappedSourceCells(rows, cols) {
@@ -984,21 +1012,27 @@ function clampSourceAroundCenter(center, width, height) {
   return { x, y, width, height };
 }
 
-function getPieceSourceBounds(row, col, rows, cols, sourceBounds, tabSize = 0, pieceWidth = 1, pieceHeight = 1) {
+function getPieceSourceBounds(row, col, rows, cols, sourceBounds, tabSize = 0, pieceWidth = 1, pieceHeight = 1, rowTracks, colTracks) {
   const source = sourceBounds || {
     x: 0,
     y: 0,
     width: video.videoWidth,
     height: video.videoHeight
   };
-  const cellWidth = source.width / cols;
-  const cellHeight = source.height / rows;
+  const colTrack = colTracks?.[col];
+  const rowTrack = rowTracks?.[row];
+  const totalTrackWidth = colTracks ? colTracks[colTracks.length - 1].start + colTracks[colTracks.length - 1].size : 1;
+  const totalTrackHeight = rowTracks ? rowTracks[rowTracks.length - 1].start + rowTracks[rowTracks.length - 1].size : 1;
+  const cellX = colTrack ? source.x + (colTrack.start / totalTrackWidth) * source.width : source.x + col * (source.width / cols);
+  const cellY = rowTrack ? source.y + (rowTrack.start / totalTrackHeight) * source.height : source.y + row * (source.height / rows);
+  const cellWidth = colTrack ? (colTrack.size / totalTrackWidth) * source.width : source.width / cols;
+  const cellHeight = rowTrack ? (rowTrack.size / totalTrackHeight) * source.height : source.height / rows;
   const sourceTabX = cellWidth * (tabSize / pieceWidth);
   const sourceTabY = cellHeight * (tabSize / pieceHeight);
-  const x = clamp(source.x + col * cellWidth - sourceTabX, source.x, source.x + source.width);
-  const y = clamp(source.y + row * cellHeight - sourceTabY, source.y, source.y + source.height);
-  const right = clamp(source.x + (col + 1) * cellWidth + sourceTabX, x, source.x + source.width);
-  const bottom = clamp(source.y + (row + 1) * cellHeight + sourceTabY, y, source.y + source.height);
+  const x = clamp(cellX - sourceTabX, source.x, source.x + source.width);
+  const y = clamp(cellY - sourceTabY, source.y, source.y + source.height);
+  const right = clamp(cellX + cellWidth + sourceTabX, x, source.x + source.width);
+  const bottom = clamp(cellY + cellHeight + sourceTabY, y, source.y + source.height);
 
   return {
     x,
