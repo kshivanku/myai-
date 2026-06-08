@@ -41,16 +41,33 @@ video {
 }
 
 .puzzle-stage,
+.smile-stage,
 .title-screen {
   position: absolute;
-  inset: 0;
-  width: 100%;
+  top: 0;
+  bottom: 0;
   height: 100%;
 }
 
 .puzzle-stage {
+  left: 0;
   z-index: 1;
+  width: 50%;
   overflow: hidden;
+}
+
+.smile-stage {
+  right: 0;
+  z-index: 1;
+  width: 50%;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  background: #050607;
+}
+
+#smileCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .slot-layer,
@@ -239,6 +256,24 @@ video {
 }
 
 @media (max-width: 760px) {
+  .puzzle-stage,
+  .smile-stage {
+    width: 100%;
+    height: 50%;
+  }
+
+  .puzzle-stage {
+    top: 0;
+    bottom: auto;
+  }
+
+  .smile-stage {
+    top: auto;
+    bottom: 0;
+    border-left: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
   .poster {
     width: 100vw;
     min-width: 0;

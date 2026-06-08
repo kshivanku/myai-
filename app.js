@@ -1,7 +1,14 @@
+import {
+  FaceLandmarker,
+  FilesetResolver
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+
 const video = document.querySelector("#webcam");
 const puzzleStage = document.querySelector("#puzzleStage");
 const slotLayer = document.querySelector("#slotLayer");
 const piecesLayer = document.querySelector("#piecesLayer");
+const smileCanvas = document.querySelector("#smileCanvas");
+const smileCtx = smileCanvas.getContext("2d");
 const statusText = document.querySelector("#statusText");
 const titleScreen = document.querySelector("#titleScreen");
 const launchButton = document.querySelector("#launchButton");
@@ -16,10 +23,37 @@ let dragOffset = { x: 0, y: 0 };
 let activePointerId;
 let roundIndex = 0;
 let finalComplete = false;
+let faceLandmarker;
+let lastSmileVideoTime = -1;
+let lastSmileLandmarks;
+const smileSourceCanvas = document.createElement("canvas");
+const smileSourceCtx = smileSourceCanvas.getContext("2d", { willReadFrequently: true });
 const rounds = [
   // { rows: 3, cols: 4, shape: "jigsaw" },
   { rows: 10, cols: 10, shape: "rect" }
 ];
+
+loadFaceModel();
+
+async function loadFaceModel() {
+  try {
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+    );
+
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numFaces: 1
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}
 
 async function startWebcam() {
   try {
@@ -372,8 +406,158 @@ function drawLoop() {
   for (const piece of pieces) {
     drawPiece(piece);
   }
+  drawSmilePreview();
 
   animationFrame = requestAnimationFrame(drawLoop);
+}
+
+function drawSmilePreview() {
+  const width = smileCanvas.clientWidth;
+  const height = smileCanvas.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  const neededWidth = Math.round(width * dpr);
+  const neededHeight = Math.round(height * dpr);
+
+  if (smileCanvas.width !== neededWidth || smileCanvas.height !== neededHeight) {
+    smileCanvas.width = neededWidth;
+    smileCanvas.height = neededHeight;
+    smileCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  smileCtx.clearRect(0, 0, width, height);
+  smileCtx.fillStyle = "#050607";
+  smileCtx.fillRect(0, 0, width, height);
+  if (!video.videoWidth || !video.videoHeight) return;
+
+  drawVideoCover(smileCtx, width, height);
+  smileSourceCanvas.width = Math.round(width);
+  smileSourceCanvas.height = Math.round(height);
+  smileSourceCtx.clearRect(0, 0, width, height);
+  drawVideoCover(smileSourceCtx, width, height);
+
+  if (faceLandmarker && video.currentTime !== lastSmileVideoTime) {
+    lastSmileVideoTime = video.currentTime;
+    lastSmileLandmarks = faceLandmarker.detectForVideo(video, performance.now()).faceLandmarks?.[0];
+  }
+
+  if (lastSmileLandmarks) {
+    applySmileWarp(width, height, lastSmileLandmarks);
+  } else {
+    smileCtx.fillStyle = "rgba(255, 255, 255, 0.72)";
+    smileCtx.font = "600 14px Inter, system-ui, sans-serif";
+    smileCtx.fillText("Looking for face", 18, 28);
+  }
+}
+
+function drawVideoCover(targetCtx, width, height) {
+  const videoRatio = video.videoWidth / video.videoHeight;
+  const canvasRatio = width / height;
+  let sourceWidth = video.videoWidth;
+  let sourceHeight = video.videoHeight;
+  let sourceX = 0;
+  let sourceY = 0;
+
+  if (videoRatio > canvasRatio) {
+    sourceWidth = video.videoHeight * canvasRatio;
+    sourceX = (video.videoWidth - sourceWidth) / 2;
+  } else {
+    sourceHeight = video.videoWidth / canvasRatio;
+    sourceY = (video.videoHeight - sourceHeight) / 2;
+  }
+
+  targetCtx.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, width, height);
+}
+
+function applySmileWarp(width, height, landmarks) {
+  const leftCorner = mapVideoPointToSmile(landmarks[61], width, height);
+  const rightCorner = mapVideoPointToSmile(landmarks[291], width, height);
+  const upperLip = mapVideoPointToSmile(landmarks[13], width, height);
+  const lowerLip = mapVideoPointToSmile(landmarks[14], width, height);
+  const mouthCenter = {
+    x: (leftCorner.x + rightCorner.x) / 2,
+    y: (upperLip.y + lowerLip.y) / 2
+  };
+  const mouthWidth = Math.max(40, Math.abs(rightCorner.x - leftCorner.x));
+  const radiusX = mouthWidth * 0.92;
+  const radiusY = mouthWidth * 0.52;
+  const lift = mouthWidth * 0.16;
+  const source = smileSourceCtx.getImageData(0, 0, width, height);
+  const output = smileCtx.getImageData(0, 0, width, height);
+
+  for (let y = Math.max(0, Math.floor(mouthCenter.y - radiusY)); y < Math.min(height, Math.ceil(mouthCenter.y + radiusY)); y += 1) {
+    for (let x = Math.max(0, Math.floor(mouthCenter.x - radiusX)); x < Math.min(width, Math.ceil(mouthCenter.x + radiusX)); x += 1) {
+      const nx = (x - mouthCenter.x) / radiusX;
+      const ny = (y - mouthCenter.y) / radiusY;
+      const falloff = Math.max(0, 1 - nx * nx - ny * ny);
+      if (falloff <= 0) continue;
+
+      const cornerBias = Math.abs(nx) ** 1.7;
+      const centerBias = Math.max(0, 1 - Math.abs(nx) * 1.4);
+      const verticalWarp = (-lift * cornerBias + lift * 0.26 * centerBias) * falloff;
+      const horizontalWarp = -Math.sign(nx) * mouthWidth * 0.035 * falloff;
+      const sx = clamp(Math.round(x - horizontalWarp), 0, width - 1);
+      const sy = clamp(Math.round(y - verticalWarp), 0, height - 1);
+      const sourceIndex = (sy * width + sx) * 4;
+      const targetIndex = (y * width + x) * 4;
+
+      output.data[targetIndex] = source.data[sourceIndex];
+      output.data[targetIndex + 1] = source.data[sourceIndex + 1];
+      output.data[targetIndex + 2] = source.data[sourceIndex + 2];
+      output.data[targetIndex + 3] = 255;
+    }
+  }
+
+  smileCtx.putImageData(output, 0, 0);
+  drawSmileGuide(leftCorner, rightCorner, mouthCenter, mouthWidth);
+}
+
+function drawSmileGuide(leftCorner, rightCorner, mouthCenter, mouthWidth) {
+  smileCtx.save();
+  smileCtx.strokeStyle = "rgba(112, 214, 165, 0.72)";
+  smileCtx.lineWidth = Math.max(2, mouthWidth * 0.025);
+  smileCtx.lineCap = "round";
+  smileCtx.shadowColor = "rgba(112, 214, 165, 0.6)";
+  smileCtx.shadowBlur = 8;
+  smileCtx.beginPath();
+  smileCtx.moveTo(leftCorner.x, leftCorner.y - mouthWidth * 0.06);
+  smileCtx.quadraticCurveTo(mouthCenter.x, mouthCenter.y + mouthWidth * 0.15, rightCorner.x, rightCorner.y - mouthWidth * 0.06);
+  smileCtx.stroke();
+  smileCtx.restore();
+}
+
+function mapVideoPointToSmile(point, width, height) {
+  const source = getVideoCoverSource(width, height);
+  const videoX = point.x * video.videoWidth;
+  const videoY = point.y * video.videoHeight;
+
+  return {
+    x: ((videoX - source.x) / source.width) * width,
+    y: ((videoY - source.y) / source.height) * height
+  };
+}
+
+function getVideoCoverSource(width, height) {
+  const videoRatio = video.videoWidth / video.videoHeight;
+  const canvasRatio = width / height;
+  let sourceWidth = video.videoWidth;
+  let sourceHeight = video.videoHeight;
+  let sourceX = 0;
+  let sourceY = 0;
+
+  if (videoRatio > canvasRatio) {
+    sourceWidth = video.videoHeight * canvasRatio;
+    sourceX = (video.videoWidth - sourceWidth) / 2;
+  } else {
+    sourceHeight = video.videoWidth / canvasRatio;
+    sourceY = (video.videoHeight - sourceHeight) / 2;
+  }
+
+  return {
+    x: sourceX,
+    y: sourceY,
+    width: sourceWidth,
+    height: sourceHeight
+  };
 }
 
 function drawPiece(piece) {
