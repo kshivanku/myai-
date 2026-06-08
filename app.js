@@ -21,6 +21,7 @@ let pieces = [];
 let slots = [];
 let board = { x: 0, y: 0, width: 0, height: 0 };
 let puzzleMaskBounds;
+let puzzleMaskRadius = 0;
 let draggedPiece;
 let dragOffset = { x: 0, y: 0 };
 let activePointerId;
@@ -95,8 +96,10 @@ function stopWebcam() {
   pieces = [];
   slots = [];
   puzzleMaskBounds = undefined;
+  puzzleMaskRadius = 0;
   piecesLayer.innerHTML = "";
   slotLayer.innerHTML = "";
+  slotLayer.style.clipPath = "";
 
   if (stream) {
     stream.getTracks().forEach((track) => track.stop());
@@ -128,6 +131,7 @@ function createPuzzle() {
     slots = [];
     slotLayer.innerHTML = "";
     piecesLayer.innerHTML = "";
+    slotLayer.style.clipPath = "";
     pendingFacePuzzle = true;
     statusText.textContent = "Looking for face...";
     return;
@@ -135,10 +139,12 @@ function createPuzzle() {
 
   board = faceLayout?.board || getBoardRect();
   puzzleMaskBounds = faceLayout?.board;
+  puzzleMaskRadius = faceLayout ? Math.min(board.width, board.height) * 0.12 : 0;
   pieces = [];
   slots = [];
   slotLayer.innerHTML = "";
   piecesLayer.innerHTML = "";
+  updateSlotLayerClip();
 
   const pieceWidth = board.width / cols;
   const pieceHeight = board.height / rows;
@@ -466,12 +472,8 @@ function drawPuzzleBackground() {
 
   if (puzzleMaskBounds) {
     puzzleBackgroundCtx.fillStyle = "#000";
-    puzzleBackgroundCtx.fillRect(
-      puzzleMaskBounds.x,
-      puzzleMaskBounds.y,
-      puzzleMaskBounds.width,
-      puzzleMaskBounds.height
-    );
+    roundedRectPath(puzzleBackgroundCtx, puzzleMaskBounds.x, puzzleMaskBounds.y, puzzleMaskBounds.width, puzzleMaskBounds.height, puzzleMaskRadius);
+    puzzleBackgroundCtx.fill();
   }
 }
 
@@ -660,6 +662,7 @@ function drawPiece(piece) {
   ctx.save();
   drawPiecePath(ctx, piece, tabSize, tabSize);
   ctx.clip();
+  clipToPuzzleMask(ctx, piece);
   drawVideoCrop(ctx, piece, cssWidth, cssHeight);
   drawPieceMaterial(ctx, piece, tabSize, cssWidth, cssHeight);
   ctx.restore();
@@ -907,6 +910,46 @@ function getPieceSourceBounds(row, col, rows, cols, sourceBounds) {
     width: cellWidth,
     height: cellHeight
   };
+}
+
+function updateSlotLayerClip() {
+  if (!puzzleMaskBounds) {
+    slotLayer.style.clipPath = "";
+    return;
+  }
+
+  const right = puzzleStage.clientWidth - puzzleMaskBounds.x - puzzleMaskBounds.width;
+  const bottom = puzzleStage.clientHeight - puzzleMaskBounds.y - puzzleMaskBounds.height;
+  slotLayer.style.clipPath = `inset(${puzzleMaskBounds.y}px ${right}px ${bottom}px ${puzzleMaskBounds.x}px round ${puzzleMaskRadius}px)`;
+}
+
+function clipToPuzzleMask(targetCtx, piece) {
+  if (!puzzleMaskBounds) return;
+
+  roundedRectPath(
+    targetCtx,
+    puzzleMaskBounds.x - piece.x,
+    puzzleMaskBounds.y - piece.y,
+    puzzleMaskBounds.width,
+    puzzleMaskBounds.height,
+    puzzleMaskRadius
+  );
+  targetCtx.clip();
+}
+
+function roundedRectPath(targetCtx, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  targetCtx.beginPath();
+  targetCtx.moveTo(x + r, y);
+  targetCtx.lineTo(x + width - r, y);
+  targetCtx.quadraticCurveTo(x + width, y, x + width, y + r);
+  targetCtx.lineTo(x + width, y + height - r);
+  targetCtx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  targetCtx.lineTo(x + r, y + height);
+  targetCtx.quadraticCurveTo(x, y + height, x, y + height - r);
+  targetCtx.lineTo(x, y + r);
+  targetCtx.quadraticCurveTo(x, y, x + r, y);
+  targetCtx.closePath();
 }
 
 function getBounds(points) {

@@ -281,20 +281,7 @@ video {
 }
 
 .status-pill {
-  position: fixed;
-  top: 18px;
-  left: 50%;
-  z-index: 100;
-  transform: translateX(-50%);
-  max-width: calc(100vw - 28px);
-  padding: 9px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 999px;
-  background: rgba(9, 11, 13, 0.78);
-  color: var(--text);
-  font-size: 0.9rem;
-  backdrop-filter: blur(10px);
-  white-space: nowrap;
+  display: none;
 }
 
 .status-pill.is-hidden {
