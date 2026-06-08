@@ -151,7 +151,11 @@ function createPuzzle() {
     }
   }
 
-  scramblePieces();
+  if (isRectRound) {
+    assignPiecesToRandomSlots();
+  } else {
+    scramblePieces();
+  }
   updateStats();
 }
 
@@ -201,6 +205,23 @@ function scramblePieces() {
   updateStats();
 }
 
+function assignPiecesToRandomSlots() {
+  const shuffledSlots = [...slots].sort(() => Math.random() - 0.5);
+
+  pieces.forEach((piece, index) => {
+    const slot = shuffledSlots[index];
+    piece.placed = true;
+    piece.assignedSlot = slot;
+    slot.occupiedBy = piece;
+    slot.element.classList.add("is-filled");
+    piece.canvas.classList.add("is-placed");
+    piece.canvas.style.zIndex = "2";
+    movePiece(piece, slot.x, slot.y);
+  });
+
+  statusText.textContent = "Swap pieces to remix the grid";
+}
+
 function shuffleZOrder() {
   const shuffled = [...pieces].sort(() => Math.random() - 0.5);
   shuffled.forEach((piece, index) => {
@@ -213,7 +234,8 @@ function startDrag(event, piece) {
   if (piece.placed && rounds[roundIndex].shape === "jigsaw") return;
 
   event.preventDefault();
-  if (piece.placed) {
+  piece.dragOriginSlot = piece.assignedSlot;
+  if (piece.placed && rounds[roundIndex].shape !== "rect") {
     piece.placed = false;
     if (piece.assignedSlot) {
       piece.assignedSlot.occupiedBy = undefined;
@@ -255,18 +277,28 @@ function endDrag(event) {
   const targetSlot = getSnapSlot(draggedPiece, snapDistance);
 
   if (targetSlot) {
-    movePiece(draggedPiece, targetSlot.x, targetSlot.y);
+    if (rounds[roundIndex].shape === "rect") {
+      swapRectPieceIntoSlot(draggedPiece, targetSlot);
+    } else {
+      movePiece(draggedPiece, targetSlot.x, targetSlot.y);
+      draggedPiece.placed = true;
+      draggedPiece.assignedSlot = targetSlot;
+      targetSlot.occupiedBy = draggedPiece;
+      draggedPiece.canvas.classList.add("is-placed");
+      targetSlot.element.classList.add("is-filled");
+      draggedPiece.canvas.style.zIndex = "1";
+      statusText.textContent = "Piece locked";
+    }
+  } else if (rounds[roundIndex].shape === "rect" && draggedPiece.dragOriginSlot) {
+    movePiece(draggedPiece, draggedPiece.dragOriginSlot.x, draggedPiece.dragOriginSlot.y);
     draggedPiece.placed = true;
-    draggedPiece.assignedSlot = targetSlot;
-    targetSlot.occupiedBy = draggedPiece;
     draggedPiece.canvas.classList.add("is-placed");
-    targetSlot.element.classList.add("is-filled");
-    draggedPiece.canvas.style.zIndex = rounds[roundIndex].shape === "jigsaw" ? "1" : "2";
-    statusText.textContent = "Piece locked";
+    draggedPiece.canvas.style.zIndex = "2";
+    draggedPiece.dragOriginSlot = undefined;
   }
 
   updateStats();
-  if (pieces.every((piece) => piece.placed)) {
+  if (rounds[roundIndex].shape === "jigsaw" && pieces.every((piece) => piece.placed)) {
     completeRound();
   }
 
@@ -274,6 +306,35 @@ function endDrag(event) {
   activePointerId = undefined;
   window.removeEventListener("pointermove", dragPiece);
   window.removeEventListener("pointerup", endDrag);
+}
+
+function swapRectPieceIntoSlot(piece, targetSlot) {
+  const originSlot = piece.dragOriginSlot || piece.assignedSlot;
+  const displacedPiece = targetSlot.occupiedBy === piece ? undefined : targetSlot.occupiedBy;
+
+  if (displacedPiece && originSlot && originSlot !== targetSlot) {
+    displacedPiece.assignedSlot = originSlot;
+    originSlot.occupiedBy = displacedPiece;
+    originSlot.element.classList.add("is-filled");
+    movePiece(displacedPiece, originSlot.x, originSlot.y);
+    displacedPiece.canvas.classList.add("is-placed");
+    displacedPiece.canvas.style.zIndex = "2";
+  }
+
+  if (originSlot && originSlot !== targetSlot && !displacedPiece) {
+    originSlot.occupiedBy = undefined;
+    originSlot.element.classList.remove("is-filled");
+  }
+
+  targetSlot.occupiedBy = piece;
+  targetSlot.element.classList.add("is-filled");
+  piece.assignedSlot = targetSlot;
+  piece.placed = true;
+  piece.dragOriginSlot = undefined;
+  piece.canvas.classList.add("is-placed");
+  piece.canvas.style.zIndex = "2";
+  movePiece(piece, targetSlot.x, targetSlot.y);
+  statusText.textContent = "Pieces swapped";
 }
 
 function movePiece(piece, x, y) {
@@ -292,7 +353,6 @@ function getSnapSlot(piece, snapDistance) {
   let bestSlot;
   let bestDistance = Infinity;
   for (const slot of slots) {
-    if (slot.occupiedBy) continue;
     const distance = Math.hypot(piece.x - slot.x, piece.y - slot.y);
     if (distance < bestDistance) {
       bestDistance = distance;
