@@ -35,8 +35,7 @@ const smileSourceCanvas = document.createElement("canvas");
 const smileSourceCtx = smileSourceCanvas.getContext("2d", { willReadFrequently: true });
 const faceOval = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
 const rounds = [
-  // { rows: 3, cols: 4, shape: "jigsaw" },
-  { rows: 8, cols: 8, shape: "rect" }
+  { rows: 8, cols: 8, shape: "jigsaw" }
 ];
 
 loadFaceModel();
@@ -125,8 +124,8 @@ function createPuzzle() {
   const { rows, cols } = rounds[roundIndex];
   const isRectRound = rounds[roundIndex].shape === "rect";
   pendingFacePuzzle = false;
-  const faceLayout = isRectRound ? getFacePuzzleLayout() : undefined;
-  if (isRectRound && !faceLayout) {
+  const faceLayout = getFacePuzzleLayout();
+  if (!faceLayout) {
     pieces = [];
     slots = [];
     slotLayer.innerHTML = "";
@@ -199,7 +198,7 @@ function createPuzzle() {
         targetX: targetX - tabSize,
         targetY: targetY - tabSize,
         assignedSlot: slotData,
-        sourceBounds: getPieceSourceBounds(row, col, rows, cols, faceLayout?.source),
+        sourceBounds: getPieceSourceBounds(row, col, rows, cols, faceLayout?.source, tabSize, pieceWidth, pieceHeight),
         x: 0,
         y: 0,
         placed: false,
@@ -241,7 +240,6 @@ function createEdges(rows, cols) {
 function scramblePieces() {
   if (!pieces.length) return;
 
-  const stageRect = puzzleStage.getBoundingClientRect();
   for (const piece of pieces) {
     piece.placed = false;
     if (piece.assignedSlot) piece.assignedSlot.occupiedBy = undefined;
@@ -252,8 +250,7 @@ function scramblePieces() {
     let y;
     let attempts = 0;
     do {
-      x = randomBetween(18, stageRect.width - piece.pieceWidth - piece.tabSize * 2 - 18);
-      y = randomBetween(18, stageRect.height - piece.pieceHeight - piece.tabSize * 2 - 18);
+      ({ x, y } = getLoosePiecePosition(piece));
       attempts += 1;
     } while (isNearTarget(piece, x, y) && attempts < 20);
 
@@ -263,6 +260,36 @@ function scramblePieces() {
   shuffleZOrder();
   statusText.textContent = "Puzzle scrambled";
   updateStats();
+}
+
+function getLoosePiecePosition(piece) {
+  const stageWidth = puzzleStage.clientWidth;
+  const stageHeight = puzzleStage.clientHeight;
+  const videoFrame = getVideoFrameRect();
+  const pieceWidth = piece.pieceWidth + piece.tabSize * 2;
+  const pieceHeight = piece.pieceHeight + piece.tabSize * 2;
+  const framePad = Math.min(44, Math.max(18, Math.min(videoFrame.width, videoFrame.height) * 0.08));
+  const blockedRect = {
+    x: videoFrame.x - framePad,
+    y: videoFrame.y - framePad,
+    width: videoFrame.width + framePad * 2,
+    height: videoFrame.height + framePad * 2
+  };
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const x = randomBetween(18, stageWidth - pieceWidth - 18);
+    const y = randomBetween(18, stageHeight - pieceHeight - 18);
+    const pieceRect = { x, y, width: pieceWidth, height: pieceHeight };
+
+    if (!rectsOverlap(pieceRect, blockedRect)) {
+      return { x, y };
+    }
+  }
+
+  return {
+    x: randomBetween(18, stageWidth - pieceWidth - 18),
+    y: randomBetween(18, stageHeight - pieceHeight - 18)
+  };
 }
 
 function assignPiecesToRandomSlots() {
@@ -291,7 +318,6 @@ function shuffleZOrder() {
 
 function startDrag(event, piece) {
   if (!stream) return;
-  if (piece.placed && rounds[roundIndex].shape === "jigsaw") return;
 
   event.preventDefault();
   piece.dragOriginSlot = piece.assignedSlot;
@@ -450,6 +476,7 @@ function drawLoop() {
 function drawPuzzleBackground() {
   const width = puzzleStage.clientWidth;
   const height = puzzleStage.clientHeight;
+  const videoFrame = getVideoFrameRect();
   const dpr = window.devicePixelRatio || 1;
   const neededWidth = Math.round(width * dpr);
   const neededHeight = Math.round(height * dpr);
@@ -466,8 +493,17 @@ function drawPuzzleBackground() {
   if (!video.videoWidth || !video.videoHeight) return;
 
   puzzleBackgroundCtx.save();
+  roundedRectPath(puzzleBackgroundCtx, videoFrame.x, videoFrame.y, videoFrame.width, videoFrame.height, videoFrame.radius);
+  puzzleBackgroundCtx.clip();
   puzzleBackgroundCtx.filter = "grayscale(1) contrast(1.08)";
-  drawVideoCover(puzzleBackgroundCtx, width, height, getActiveVideoSource(width, height));
+  drawVideoCoverAt(
+    puzzleBackgroundCtx,
+    videoFrame.x,
+    videoFrame.y,
+    videoFrame.width,
+    videoFrame.height,
+    getActiveVideoSource(videoFrame.width, videoFrame.height)
+  );
   puzzleBackgroundCtx.restore();
 
   if (puzzleMaskBounds) {
@@ -518,6 +554,10 @@ function drawSmilePreview() {
 
 function drawVideoCover(targetCtx, width, height, source = getVideoCoverSource(width, height)) {
   targetCtx.drawImage(video, source.x, source.y, source.width, source.height, 0, 0, width, height);
+}
+
+function drawVideoCoverAt(targetCtx, x, y, width, height, source = getVideoCoverSource(width, height)) {
+  targetCtx.drawImage(video, source.x, source.y, source.width, source.height, x, y, width, height);
 }
 
 function applySmileWarp(width, height, landmarks) {
@@ -662,7 +702,6 @@ function drawPiece(piece) {
   ctx.save();
   drawPiecePath(ctx, piece, tabSize, tabSize);
   ctx.clip();
-  clipToPuzzleMask(ctx, piece);
   drawVideoCrop(ctx, piece, cssWidth, cssHeight);
   drawPieceMaterial(ctx, piece, tabSize, cssWidth, cssHeight);
   ctx.restore();
@@ -842,27 +881,45 @@ function getBoardRect() {
 function getFacePuzzleLayout() {
   if (!lastSmileLandmarks || !video.videoWidth || !video.videoHeight) return undefined;
 
-  const stageWidth = puzzleStage.clientWidth;
-  const stageHeight = puzzleStage.clientHeight;
-  if (!stageWidth || !stageHeight) return undefined;
+  const videoFrame = getVideoFrameRect();
+  if (!videoFrame.width || !videoFrame.height) return undefined;
 
-  const videoSource = getActiveVideoSource(stageWidth, stageHeight);
+  const videoSource = getActiveVideoSource(videoFrame.width, videoFrame.height);
   const videoPoints = getFaceVideoPoints();
 
   if (videoPoints.length < 8) return undefined;
 
   const visiblePoints = videoPoints.map((point) => ({
-    x: ((point.x - videoSource.x) / videoSource.width) * stageWidth,
-    y: ((point.y - videoSource.y) / videoSource.height) * stageHeight
+    x: videoFrame.x + ((point.x - videoSource.x) / videoSource.width) * videoFrame.width,
+    y: videoFrame.y + ((point.y - videoSource.y) / videoSource.height) * videoFrame.height
   }));
 
   const displayBounds = expandBounds(getBounds(visiblePoints), 0.18, 0.12);
-  const displayBoard = clampBounds(displayBounds, stageWidth, stageHeight);
-  const sourceBounds = mapStageBoundsToVideo(displayBoard, videoSource, stageWidth, stageHeight);
+  const displayBoard = clampBoundsToRect(displayBounds, videoFrame);
+  const localBoard = {
+    x: displayBoard.x - videoFrame.x,
+    y: displayBoard.y - videoFrame.y,
+    width: displayBoard.width,
+    height: displayBoard.height
+  };
+  const sourceBounds = mapStageBoundsToVideo(localBoard, videoSource, videoFrame.width, videoFrame.height);
 
   return {
     board: displayBoard,
     source: clampBounds(sourceBounds, video.videoWidth, video.videoHeight)
+  };
+}
+
+function getVideoFrameRect() {
+  const margin = 32;
+  const size = Math.min(400, Math.max(160, puzzleStage.clientWidth - margin), Math.max(160, puzzleStage.clientHeight - margin));
+
+  return {
+    x: (puzzleStage.clientWidth - size) / 2,
+    y: (puzzleStage.clientHeight - size) / 2,
+    width: size,
+    height: size,
+    radius: 28
   };
 }
 
@@ -894,7 +951,7 @@ function clampSourceAroundCenter(center, width, height) {
   return { x, y, width, height };
 }
 
-function getPieceSourceBounds(row, col, rows, cols, sourceBounds) {
+function getPieceSourceBounds(row, col, rows, cols, sourceBounds, tabSize = 0, pieceWidth = 1, pieceHeight = 1) {
   const source = sourceBounds || {
     x: 0,
     y: 0,
@@ -903,12 +960,18 @@ function getPieceSourceBounds(row, col, rows, cols, sourceBounds) {
   };
   const cellWidth = source.width / cols;
   const cellHeight = source.height / rows;
+  const sourceTabX = cellWidth * (tabSize / pieceWidth);
+  const sourceTabY = cellHeight * (tabSize / pieceHeight);
+  const x = clamp(source.x + col * cellWidth - sourceTabX, source.x, source.x + source.width);
+  const y = clamp(source.y + row * cellHeight - sourceTabY, source.y, source.y + source.height);
+  const right = clamp(source.x + (col + 1) * cellWidth + sourceTabX, x, source.x + source.width);
+  const bottom = clamp(source.y + (row + 1) * cellHeight + sourceTabY, y, source.y + source.height);
 
   return {
-    x: source.x + col * cellWidth,
-    y: source.y + row * cellHeight,
-    width: cellWidth,
-    height: cellHeight
+    x,
+    y,
+    width: right - x,
+    height: bottom - y
   };
 }
 
@@ -921,20 +984,6 @@ function updateSlotLayerClip() {
   const right = puzzleStage.clientWidth - puzzleMaskBounds.x - puzzleMaskBounds.width;
   const bottom = puzzleStage.clientHeight - puzzleMaskBounds.y - puzzleMaskBounds.height;
   slotLayer.style.clipPath = `inset(${puzzleMaskBounds.y}px ${right}px ${bottom}px ${puzzleMaskBounds.x}px round ${puzzleMaskRadius}px)`;
-}
-
-function clipToPuzzleMask(targetCtx, piece) {
-  if (!puzzleMaskBounds) return;
-
-  roundedRectPath(
-    targetCtx,
-    puzzleMaskBounds.x - piece.x,
-    puzzleMaskBounds.y - piece.y,
-    puzzleMaskBounds.width,
-    puzzleMaskBounds.height,
-    puzzleMaskRadius
-  );
-  targetCtx.clip();
 }
 
 function roundedRectPath(targetCtx, x, y, width, height, radius) {
@@ -992,6 +1041,24 @@ function clampBounds(bounds, maxWidth, maxHeight) {
     width: Math.max(1, right - x),
     height: Math.max(1, bottom - y)
   };
+}
+
+function clampBoundsToRect(bounds, rect) {
+  const x = clamp(bounds.x, rect.x, rect.x + rect.width);
+  const y = clamp(bounds.y, rect.y, rect.y + rect.height);
+  const right = clamp(bounds.x + bounds.width, x, rect.x + rect.width);
+  const bottom = clamp(bounds.y + bounds.height, y, rect.y + rect.height);
+
+  return {
+    x,
+    y,
+    width: Math.max(1, right - x),
+    height: Math.max(1, bottom - y)
+  };
+}
+
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }
 
 function isNearTarget(piece, x, y) {
