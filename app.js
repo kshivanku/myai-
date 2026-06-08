@@ -17,7 +17,7 @@ let activePointerId;
 let roundIndex = 0;
 let finalComplete = false;
 const rounds = [
-  { rows: 3, cols: 4, shape: "jigsaw" },
+  // { rows: 3, cols: 4, shape: "jigsaw" },
   { rows: 10, cols: 10, shape: "rect" }
 ];
 
