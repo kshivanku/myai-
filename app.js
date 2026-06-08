@@ -414,14 +414,11 @@ function drawLoop() {
 function drawSmilePreview() {
   const width = smileCanvas.clientWidth;
   const height = smileCanvas.clientHeight;
-  const dpr = window.devicePixelRatio || 1;
-  const neededWidth = Math.round(width * dpr);
-  const neededHeight = Math.round(height * dpr);
 
-  if (smileCanvas.width !== neededWidth || smileCanvas.height !== neededHeight) {
-    smileCanvas.width = neededWidth;
-    smileCanvas.height = neededHeight;
-    smileCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (smileCanvas.width !== width || smileCanvas.height !== height) {
+    smileCanvas.width = width;
+    smileCanvas.height = height;
+    smileCtx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
   smileCtx.clearRect(0, 0, width, height);
@@ -478,9 +475,9 @@ function applySmileWarp(width, height, landmarks) {
     y: (upperLip.y + lowerLip.y) / 2
   };
   const mouthWidth = Math.max(40, Math.abs(rightCorner.x - leftCorner.x));
-  const radiusX = mouthWidth * 0.92;
-  const radiusY = mouthWidth * 0.52;
-  const lift = mouthWidth * 0.16;
+  const radiusX = mouthWidth * 1.18;
+  const radiusY = mouthWidth * 0.72;
+  const lift = mouthWidth * 0.34;
   const source = smileSourceCtx.getImageData(0, 0, width, height);
   const output = smileCtx.getImageData(0, 0, width, height);
 
@@ -491,10 +488,10 @@ function applySmileWarp(width, height, landmarks) {
       const falloff = Math.max(0, 1 - nx * nx - ny * ny);
       if (falloff <= 0) continue;
 
-      const cornerBias = Math.abs(nx) ** 1.7;
+      const cornerBias = Math.abs(nx) ** 1.35;
       const centerBias = Math.max(0, 1 - Math.abs(nx) * 1.4);
-      const verticalWarp = (-lift * cornerBias + lift * 0.26 * centerBias) * falloff;
-      const horizontalWarp = -Math.sign(nx) * mouthWidth * 0.035 * falloff;
+      const verticalWarp = (-lift * cornerBias + lift * 0.2 * centerBias) * falloff;
+      const horizontalWarp = -Math.sign(nx) * mouthWidth * 0.07 * falloff;
       const sx = clamp(Math.round(x - horizontalWarp), 0, width - 1);
       const sy = clamp(Math.round(y - verticalWarp), 0, height - 1);
       const sourceIndex = (sy * width + sx) * 4;
@@ -508,7 +505,6 @@ function applySmileWarp(width, height, landmarks) {
   }
 
   smileCtx.putImageData(output, 0, 0);
-  drawSmileGuide(leftCorner, rightCorner, mouthCenter, mouthWidth);
 }
 
 function drawSmileGuide(leftCorner, rightCorner, mouthCenter, mouthWidth) {
