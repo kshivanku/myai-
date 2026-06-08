@@ -5,6 +5,8 @@ import {
 
 const video = document.querySelector("#webcam");
 const puzzleStage = document.querySelector("#puzzleStage");
+const puzzleBackground = document.querySelector("#puzzleBackground");
+const puzzleBackgroundCtx = puzzleBackground.getContext("2d");
 const slotLayer = document.querySelector("#slotLayer");
 const piecesLayer = document.querySelector("#piecesLayer");
 const smileCanvas = document.querySelector("#smileCanvas");
@@ -26,8 +28,10 @@ let finalComplete = false;
 let faceLandmarker;
 let lastSmileVideoTime = -1;
 let lastSmileLandmarks;
+let pendingFacePuzzle = false;
 const smileSourceCanvas = document.createElement("canvas");
 const smileSourceCtx = smileSourceCanvas.getContext("2d", { willReadFrequently: true });
+const faceOval = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
 const rounds = [
   // { rows: 3, cols: 4, shape: "jigsaw" },
   { rows: 10, cols: 10, shape: "rect" }
@@ -115,7 +119,19 @@ function launchCurrentRound() {
 function createPuzzle() {
   const { rows, cols } = rounds[roundIndex];
   const isRectRound = rounds[roundIndex].shape === "rect";
-  board = getBoardRect();
+  pendingFacePuzzle = false;
+  const faceLayout = isRectRound ? getFacePuzzleLayout() : undefined;
+  if (isRectRound && !faceLayout) {
+    pieces = [];
+    slots = [];
+    slotLayer.innerHTML = "";
+    piecesLayer.innerHTML = "";
+    pendingFacePuzzle = true;
+    statusText.textContent = "Looking for face...";
+    return;
+  }
+
+  board = faceLayout?.board || getBoardRect();
   pieces = [];
   slots = [];
   slotLayer.innerHTML = "";
@@ -174,6 +190,7 @@ function createPuzzle() {
         targetX: targetX - tabSize,
         targetY: targetY - tabSize,
         assignedSlot: slotData,
+        sourceBounds: getPieceSourceBounds(row, col, rows, cols, faceLayout?.source),
         x: 0,
         y: 0,
         placed: false,
@@ -403,12 +420,41 @@ function drawLoop() {
     return;
   }
 
+  drawPuzzleBackground();
+  drawSmilePreview();
+  if (pendingFacePuzzle && lastSmileLandmarks) {
+    createPuzzle();
+  }
+
   for (const piece of pieces) {
     drawPiece(piece);
   }
-  drawSmilePreview();
 
   animationFrame = requestAnimationFrame(drawLoop);
+}
+
+function drawPuzzleBackground() {
+  const width = puzzleStage.clientWidth;
+  const height = puzzleStage.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  const neededWidth = Math.round(width * dpr);
+  const neededHeight = Math.round(height * dpr);
+
+  if (puzzleBackground.width !== neededWidth || puzzleBackground.height !== neededHeight) {
+    puzzleBackground.width = neededWidth;
+    puzzleBackground.height = neededHeight;
+    puzzleBackgroundCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  puzzleBackgroundCtx.clearRect(0, 0, width, height);
+  puzzleBackgroundCtx.fillStyle = "#050607";
+  puzzleBackgroundCtx.fillRect(0, 0, width, height);
+  if (!video.videoWidth || !video.videoHeight) return;
+
+  puzzleBackgroundCtx.save();
+  puzzleBackgroundCtx.filter = "grayscale(1) contrast(1.08)";
+  drawVideoCover(puzzleBackgroundCtx, width, height);
+  puzzleBackgroundCtx.restore();
 }
 
 function drawSmilePreview() {
@@ -656,18 +702,11 @@ function drawUnevenEdgeDefinition(targetCtx, piece, tabSize, edgeScale) {
 }
 
 function drawVideoCrop(targetCtx, piece, drawWidth, drawHeight) {
-  const sourcePieceWidth = video.videoWidth / piece.cols;
-  const sourcePieceHeight = video.videoHeight / piece.rows;
-  const sourceTabX = sourcePieceWidth * (piece.tabSize / piece.pieceWidth);
-  const sourceTabY = sourcePieceHeight * (piece.tabSize / piece.pieceHeight);
-  const sourceX = clamp(piece.col * sourcePieceWidth - sourceTabX, 0, video.videoWidth - 1);
-  const sourceY = clamp(piece.row * sourcePieceHeight - sourceTabY, 0, video.videoHeight - 1);
-  const sourceWidth = clamp(sourcePieceWidth + sourceTabX * 2, 1, video.videoWidth - sourceX);
-  const sourceHeight = clamp(sourcePieceHeight + sourceTabY * 2, 1, video.videoHeight - sourceY);
+  const source = piece.sourceBounds || getPieceSourceBounds(piece.row, piece.col, piece.rows, piece.cols);
 
   targetCtx.save();
   targetCtx.filter = "grayscale(1) contrast(1.08)";
-  targetCtx.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, drawWidth, drawHeight);
+  targetCtx.drawImage(video, source.x, source.y, source.width, source.height, 0, 0, drawWidth, drawHeight);
   targetCtx.restore();
 }
 
@@ -756,6 +795,98 @@ function getBoardRect() {
     y: (stageRect.height - height) / 2,
     width,
     height
+  };
+}
+
+function getFacePuzzleLayout() {
+  if (!lastSmileLandmarks || !video.videoWidth || !video.videoHeight) return undefined;
+
+  const stageWidth = puzzleStage.clientWidth;
+  const stageHeight = puzzleStage.clientHeight;
+  if (!stageWidth || !stageHeight) return undefined;
+
+  const videoSource = getVideoCoverSource(stageWidth, stageHeight);
+  const videoPoints = faceOval
+    .map((index) => lastSmileLandmarks[index])
+    .filter(Boolean)
+    .map((point) => ({
+      x: point.x * video.videoWidth,
+      y: point.y * video.videoHeight
+    }));
+
+  if (videoPoints.length < 8) return undefined;
+
+  const visiblePoints = videoPoints.map((point) => ({
+    x: ((point.x - videoSource.x) / videoSource.width) * stageWidth,
+    y: ((point.y - videoSource.y) / videoSource.height) * stageHeight
+  }));
+
+  const displayBounds = expandBounds(getBounds(visiblePoints), 0.18, 0.12);
+  const sourceBounds = expandBounds(getBounds(videoPoints), 0.18, 0.12);
+
+  return {
+    board: clampBounds(displayBounds, stageWidth, stageHeight),
+    source: clampBounds(sourceBounds, video.videoWidth, video.videoHeight)
+  };
+}
+
+function getPieceSourceBounds(row, col, rows, cols, sourceBounds) {
+  const source = sourceBounds || {
+    x: 0,
+    y: 0,
+    width: video.videoWidth,
+    height: video.videoHeight
+  };
+  const cellWidth = source.width / cols;
+  const cellHeight = source.height / rows;
+
+  return {
+    x: source.x + col * cellWidth,
+    y: source.y + row * cellHeight,
+    width: cellWidth,
+    height: cellHeight
+  };
+}
+
+function getBounds(points) {
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY
+  };
+}
+
+function expandBounds(bounds, xPaddingRatio, yPaddingRatio) {
+  const xPadding = bounds.width * xPaddingRatio;
+  const yPadding = bounds.height * yPaddingRatio;
+
+  return {
+    x: bounds.x - xPadding,
+    y: bounds.y - yPadding,
+    width: bounds.width + xPadding * 2,
+    height: bounds.height + yPadding * 2
+  };
+}
+
+function clampBounds(bounds, maxWidth, maxHeight) {
+  const x = clamp(bounds.x, 0, maxWidth);
+  const y = clamp(bounds.y, 0, maxHeight);
+  const right = clamp(bounds.x + bounds.width, x, maxWidth);
+  const bottom = clamp(bounds.y + bounds.height, y, maxHeight);
+
+  return {
+    x,
+    y,
+    width: Math.max(1, right - x),
+    height: Math.max(1, bottom - y)
   };
 }
 
