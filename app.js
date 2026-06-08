@@ -20,6 +20,7 @@ let animationFrame;
 let pieces = [];
 let slots = [];
 let board = { x: 0, y: 0, width: 0, height: 0 };
+let puzzleMaskBounds;
 let draggedPiece;
 let dragOffset = { x: 0, y: 0 };
 let activePointerId;
@@ -93,6 +94,7 @@ function stopWebcam() {
   finalComplete = false;
   pieces = [];
   slots = [];
+  puzzleMaskBounds = undefined;
   piecesLayer.innerHTML = "";
   slotLayer.innerHTML = "";
 
@@ -132,6 +134,7 @@ function createPuzzle() {
   }
 
   board = faceLayout?.board || getBoardRect();
+  puzzleMaskBounds = faceLayout?.board;
   pieces = [];
   slots = [];
   slotLayer.innerHTML = "";
@@ -460,6 +463,16 @@ function drawPuzzleBackground() {
   puzzleBackgroundCtx.filter = "grayscale(1) contrast(1.08)";
   drawVideoCover(puzzleBackgroundCtx, width, height);
   puzzleBackgroundCtx.restore();
+
+  if (puzzleMaskBounds) {
+    puzzleBackgroundCtx.fillStyle = "#000";
+    puzzleBackgroundCtx.fillRect(
+      puzzleMaskBounds.x,
+      puzzleMaskBounds.y,
+      puzzleMaskBounds.width,
+      puzzleMaskBounds.height
+    );
+  }
 }
 
 function updateFaceLandmarks() {
