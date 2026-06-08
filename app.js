@@ -34,7 +34,7 @@ const smileSourceCtx = smileSourceCanvas.getContext("2d", { willReadFrequently: 
 const faceOval = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
 const rounds = [
   // { rows: 3, cols: 4, shape: "jigsaw" },
-  { rows: 10, cols: 10, shape: "rect" }
+  { rows: 2, cols: 4, shape: "rect" }
 ];
 
 loadFaceModel();
@@ -324,7 +324,7 @@ function endDrag(event) {
   if (!draggedPiece || event.pointerId !== activePointerId) return;
 
   draggedPiece.canvas.classList.remove("is-dragging");
-  const snapDistance = Math.min(draggedPiece.pieceWidth, draggedPiece.pieceHeight) * 0.33;
+  const snapDistance = Math.min(draggedPiece.pieceWidth, draggedPiece.pieceHeight) * 0.65;
   const targetSlot = getSnapSlot(draggedPiece, snapDistance);
 
   if (targetSlot) {
@@ -403,8 +403,12 @@ function getSnapSlot(piece, snapDistance) {
 
   let bestSlot;
   let bestDistance = Infinity;
+  const pieceCenterX = piece.x + piece.pieceWidth / 2;
+  const pieceCenterY = piece.y + piece.pieceHeight / 2;
   for (const slot of slots) {
-    const distance = Math.hypot(piece.x - slot.x, piece.y - slot.y);
+    const slotCenterX = slot.x + piece.pieceWidth / 2;
+    const slotCenterY = slot.y + piece.pieceHeight / 2;
+    const distance = Math.hypot(pieceCenterX - slotCenterX, pieceCenterY - slotCenterY);
     if (distance < bestDistance) {
       bestDistance = distance;
       bestSlot = slot;
