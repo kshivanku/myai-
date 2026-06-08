@@ -85,8 +85,8 @@ video {
 
 .slot {
   position: absolute;
-  border: 0;
-  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .slot.is-filled {
