@@ -26,7 +26,7 @@ let activePointerId;
 let roundIndex = 0;
 let finalComplete = false;
 let faceLandmarker;
-let lastSmileVideoTime = -1;
+let lastFaceVideoTime = -1;
 let lastSmileLandmarks;
 let pendingFacePuzzle = false;
 const smileSourceCanvas = document.createElement("canvas");
@@ -421,6 +421,7 @@ function drawLoop() {
   }
 
   drawPuzzleBackground();
+  updateFaceLandmarks();
   drawSmilePreview();
   if (pendingFacePuzzle && lastSmileLandmarks) {
     createPuzzle();
@@ -457,9 +458,18 @@ function drawPuzzleBackground() {
   puzzleBackgroundCtx.restore();
 }
 
+function updateFaceLandmarks() {
+  if (!faceLandmarker || !video.videoWidth || !video.videoHeight) return;
+  if (video.currentTime === lastFaceVideoTime) return;
+
+  lastFaceVideoTime = video.currentTime;
+  lastSmileLandmarks = faceLandmarker.detectForVideo(video, performance.now()).faceLandmarks?.[0];
+}
+
 function drawSmilePreview() {
   const width = smileCanvas.clientWidth;
   const height = smileCanvas.clientHeight;
+  if (!width || !height) return;
 
   if (smileCanvas.width !== width || smileCanvas.height !== height) {
     smileCanvas.width = width;
@@ -477,11 +487,6 @@ function drawSmilePreview() {
   smileSourceCanvas.height = Math.round(height);
   smileSourceCtx.clearRect(0, 0, width, height);
   drawVideoCover(smileSourceCtx, width, height);
-
-  if (faceLandmarker && video.currentTime !== lastSmileVideoTime) {
-    lastSmileVideoTime = video.currentTime;
-    lastSmileLandmarks = faceLandmarker.detectForVideo(video, performance.now()).faceLandmarks?.[0];
-  }
 
   if (lastSmileLandmarks) {
     applySmileWarp(width, height, lastSmileLandmarks);
@@ -822,11 +827,21 @@ function getFacePuzzleLayout() {
   }));
 
   const displayBounds = expandBounds(getBounds(visiblePoints), 0.18, 0.12);
-  const sourceBounds = expandBounds(getBounds(videoPoints), 0.18, 0.12);
+  const displayBoard = clampBounds(displayBounds, stageWidth, stageHeight);
+  const sourceBounds = mapStageBoundsToVideo(displayBoard, videoSource, stageWidth, stageHeight);
 
   return {
-    board: clampBounds(displayBounds, stageWidth, stageHeight),
+    board: displayBoard,
     source: clampBounds(sourceBounds, video.videoWidth, video.videoHeight)
+  };
+}
+
+function mapStageBoundsToVideo(bounds, videoSource, stageWidth, stageHeight) {
+  return {
+    x: videoSource.x + (bounds.x / stageWidth) * videoSource.width,
+    y: videoSource.y + (bounds.y / stageHeight) * videoSource.height,
+    width: (bounds.width / stageWidth) * videoSource.width,
+    height: (bounds.height / stageHeight) * videoSource.height
   };
 }
 
