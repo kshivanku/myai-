@@ -149,7 +149,7 @@ function createPuzzle() {
   const pieceHeight = board.height / rows;
   const tabSize = isRectRound ? 0 : Math.min(pieceWidth, pieceHeight) * 0.18;
   const edges = createEdges(rows, cols);
-  const sourceCells = createRandomizedSourceCells(rows, cols);
+  const sourceCells = createSwappedSourceCells(rows, cols);
 
   for (let row = 0; row < rows; row += 1) {
     for (let col = 0; col < cols; col += 1) {
@@ -239,7 +239,7 @@ function createEdges(rows, cols) {
   return { horizontal, vertical };
 }
 
-function createRandomizedSourceCells(rows, cols) {
+function createSwappedSourceCells(rows, cols) {
   const cells = [];
   for (let row = 0; row < rows; row += 1) {
     for (let col = 0; col < cols; col += 1) {
@@ -249,13 +249,15 @@ function createRandomizedSourceCells(rows, cols) {
 
   if (cells.length < 2) return cells;
 
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    const shuffled = [...cells].sort(() => Math.random() - 0.5);
-    const hasSameCell = shuffled.some((cell, index) => cell.row === cells[index].row && cell.col === cells[index].col);
-    if (!hasSameCell) return shuffled;
+  const swapped = [...cells];
+  const firstIndex = Math.floor(Math.random() * swapped.length);
+  let secondIndex = Math.floor(Math.random() * swapped.length);
+  while (secondIndex === firstIndex) {
+    secondIndex = Math.floor(Math.random() * swapped.length);
   }
 
-  return cells.map((_, index) => cells[(index + 1) % cells.length]);
+  [swapped[firstIndex], swapped[secondIndex]] = [swapped[secondIndex], swapped[firstIndex]];
+  return swapped;
 }
 
 function scramblePieces() {

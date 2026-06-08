@@ -1,6 +1,6 @@
 :root {
   color-scheme: dark;
-  --bg: #090b0d;
+  --bg: #EBEAE4;
   --line: #3a4249;
   --text: #f3f6f4;
   --muted: #aab4b0;
@@ -29,7 +29,7 @@ body {
 .stage {
   position: relative;
   overflow: hidden;
-  background: #090b0d;
+  background: var(--bg);
 }
 
 video {
@@ -57,7 +57,7 @@ video {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #050607;
+  background: var(--bg);
 }
 
 .smile-stage {
