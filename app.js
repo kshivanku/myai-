@@ -475,9 +475,9 @@ function applySmileWarp(width, height, landmarks) {
     y: (upperLip.y + lowerLip.y) / 2
   };
   const mouthWidth = Math.max(40, Math.abs(rightCorner.x - leftCorner.x));
-  const radiusX = mouthWidth * 1.18;
-  const radiusY = mouthWidth * 0.72;
-  const lift = mouthWidth * 0.34;
+  const radiusX = mouthWidth * 1.45;
+  const radiusY = mouthWidth * 0.94;
+  const lift = mouthWidth * 0.58;
   const source = smileSourceCtx.getImageData(0, 0, width, height);
   const output = smileCtx.getImageData(0, 0, width, height);
 
@@ -488,10 +488,10 @@ function applySmileWarp(width, height, landmarks) {
       const falloff = Math.max(0, 1 - nx * nx - ny * ny);
       if (falloff <= 0) continue;
 
-      const cornerBias = Math.abs(nx) ** 1.35;
-      const centerBias = Math.max(0, 1 - Math.abs(nx) * 1.4);
-      const verticalWarp = (-lift * cornerBias + lift * 0.2 * centerBias) * falloff;
-      const horizontalWarp = -Math.sign(nx) * mouthWidth * 0.07 * falloff;
+      const cornerBias = Math.abs(nx) ** 1.08;
+      const centerBias = Math.max(0, 1 - Math.abs(nx) * 1.25);
+      const verticalWarp = (-lift * cornerBias + lift * 0.26 * centerBias) * falloff;
+      const horizontalWarp = -Math.sign(nx) * mouthWidth * 0.14 * falloff;
       const sx = clamp(Math.round(x - horizontalWarp), 0, width - 1);
       const sy = clamp(Math.round(y - verticalWarp), 0, height - 1);
       const sourceIndex = (sy * width + sx) * 4;
