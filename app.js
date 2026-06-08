@@ -523,7 +523,7 @@ function drawPuzzleBackground() {
   }
 
   puzzleBackgroundCtx.clearRect(0, 0, width, height);
-  puzzleBackgroundCtx.fillStyle = "#050607";
+  puzzleBackgroundCtx.fillStyle = "#EBEAE4";
   puzzleBackgroundCtx.fillRect(0, 0, width, height);
   if (!video.videoWidth || !video.videoHeight) return;
 
