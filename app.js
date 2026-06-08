@@ -155,7 +155,7 @@ function createPuzzle() {
       const sourceCell = sourceCells[row * cols + col];
       const pieceWidth = colTracks[col].size;
       const pieceHeight = rowTracks[row].size;
-      const tabSize = isRectRound ? 0 : Math.min(pieceWidth, pieceHeight) * 0.18;
+      const tabSize = isRectRound ? 0 : Math.min(pieceWidth, pieceHeight) * 0.24;
       const targetX = board.x + colTracks[col].start;
       const targetY = board.y + rowTracks[row].start;
       const slot = document.createElement("div");
@@ -196,6 +196,7 @@ function createPuzzle() {
           bottom: edges.horizontal[row + 1][col],
           left: edges.vertical[row][col]
         },
+        organicShape: createOrganicPieceShape(row, col, pieceWidth, pieceHeight),
         pieceWidth,
         pieceHeight,
         tabSize,
@@ -253,8 +254,8 @@ function createEdges(rows, cols) {
 }
 
 function createVariedTracks(count, totalSize) {
-  const variation = 0.24;
-  const weights = Array.from({ length: count }, (_, index) => 1 + sketchNoise(index, count, 31) * variation);
+  const variation = 0.52;
+  const weights = Array.from({ length: count }, (_, index) => clamp(1 + sketchNoise(index, count, 31) * variation, 0.56, 1.58));
   const weightTotal = weights.reduce((sum, weight) => sum + weight, 0);
   let cursor = 0;
 
@@ -265,6 +266,21 @@ function createVariedTracks(count, totalSize) {
     cursor += size;
     return track;
   });
+}
+
+function createOrganicPieceShape(row, col, width, height) {
+  const amplitude = Math.min(width, height) * 0.105;
+  const corner = (saltX, saltY) => ({
+    x: sketchNoise(row * 29 + col * 37, saltX, 41) * amplitude,
+    y: sketchNoise(row * 31 + col * 43, saltY, 47) * amplitude
+  });
+
+  return {
+    topLeft: corner(1, 2),
+    topRight: corner(3, 4),
+    bottomRight: corner(5, 6),
+    bottomLeft: corner(7, 8)
+  };
 }
 
 function createEyeSwappedSourceCells(rows, cols) {
@@ -865,11 +881,22 @@ function drawPiecePath(targetCtx, piece, offsetX, offsetY) {
     targetCtx.closePath();
     return;
   }
-  targetCtx.moveTo(offsetX, offsetY);
-  drawEdge(targetCtx, offsetX, offsetY, offsetX + w, offsetY, piece.edges.top, t, "horizontal");
-  drawEdge(targetCtx, offsetX + w, offsetY, offsetX + w, offsetY + h, piece.edges.right, t, "vertical");
-  drawEdge(targetCtx, offsetX + w, offsetY + h, offsetX, offsetY + h, piece.edges.bottom, t, "horizontal");
-  drawEdge(targetCtx, offsetX, offsetY + h, offsetX, offsetY, piece.edges.left, t, "vertical");
+  const shape = piece.organicShape || {
+    topLeft: { x: 0, y: 0 },
+    topRight: { x: 0, y: 0 },
+    bottomRight: { x: 0, y: 0 },
+    bottomLeft: { x: 0, y: 0 }
+  };
+  const topLeft = { x: offsetX + shape.topLeft.x, y: offsetY + shape.topLeft.y };
+  const topRight = { x: offsetX + w + shape.topRight.x, y: offsetY + shape.topRight.y };
+  const bottomRight = { x: offsetX + w + shape.bottomRight.x, y: offsetY + h + shape.bottomRight.y };
+  const bottomLeft = { x: offsetX + shape.bottomLeft.x, y: offsetY + h + shape.bottomLeft.y };
+
+  targetCtx.moveTo(topLeft.x, topLeft.y);
+  drawEdge(targetCtx, topLeft.x, topLeft.y, topRight.x, topRight.y, piece.edges.top, t, "horizontal");
+  drawEdge(targetCtx, topRight.x, topRight.y, bottomRight.x, bottomRight.y, piece.edges.right, t, "vertical");
+  drawEdge(targetCtx, bottomRight.x, bottomRight.y, bottomLeft.x, bottomLeft.y, piece.edges.bottom, t, "horizontal");
+  drawEdge(targetCtx, bottomLeft.x, bottomLeft.y, topLeft.x, topLeft.y, piece.edges.left, t, "vertical");
   targetCtx.closePath();
 }
 
