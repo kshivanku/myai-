@@ -495,7 +495,6 @@ function drawPuzzleBackground() {
   puzzleBackgroundCtx.save();
   roundedRectPath(puzzleBackgroundCtx, videoFrame.x, videoFrame.y, videoFrame.width, videoFrame.height, videoFrame.radius);
   puzzleBackgroundCtx.clip();
-  puzzleBackgroundCtx.filter = "grayscale(1) contrast(1.08)";
   drawVideoCoverAt(
     puzzleBackgroundCtx,
     videoFrame.x,
@@ -785,7 +784,6 @@ function drawVideoCrop(targetCtx, piece, drawWidth, drawHeight) {
   const source = piece.sourceBounds || getPieceSourceBounds(piece.row, piece.col, piece.rows, piece.cols);
 
   targetCtx.save();
-  targetCtx.filter = "grayscale(1) contrast(1.08)";
   targetCtx.drawImage(video, source.x, source.y, source.width, source.height, 0, 0, drawWidth, drawHeight);
   targetCtx.restore();
 }

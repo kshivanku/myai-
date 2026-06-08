@@ -58,7 +58,6 @@ video {
   height: 100%;
   overflow: hidden;
   background: #050607;
-  filter: grayscale(1);
 }
 
 .smile-stage {
@@ -99,7 +98,7 @@ video {
   position: absolute;
   touch-action: none;
   cursor: grab;
-  filter: grayscale(1) contrast(1.08) drop-shadow(0 12px 18px rgba(0, 0, 0, 0.38));
+  filter: contrast(1.04) drop-shadow(0 12px 18px rgba(0, 0, 0, 0.38));
   transform-origin: center;
   transition: filter 140ms ease, transform 140ms ease;
   will-change: left, top;
@@ -107,14 +106,14 @@ video {
 
 .piece.is-dragging {
   cursor: grabbing;
-  filter: grayscale(1) contrast(1.08) drop-shadow(0 18px 26px rgba(0, 0, 0, 0.52));
+  filter: contrast(1.04) drop-shadow(0 18px 26px rgba(0, 0, 0, 0.52));
   transform: scale(1.035);
   z-index: 50;
 }
 
 .piece.is-placed {
   cursor: default;
-  filter: grayscale(1) contrast(1.08);
+  filter: contrast(1.04);
   z-index: 1;
 }
 
