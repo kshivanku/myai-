@@ -461,7 +461,7 @@ function drawPuzzleBackground() {
 
   puzzleBackgroundCtx.save();
   puzzleBackgroundCtx.filter = "grayscale(1) contrast(1.08)";
-  drawVideoCover(puzzleBackgroundCtx, width, height);
+  drawVideoCover(puzzleBackgroundCtx, width, height, getActiveVideoSource(width, height));
   puzzleBackgroundCtx.restore();
 
   if (puzzleMaskBounds) {
@@ -514,23 +514,8 @@ function drawSmilePreview() {
   }
 }
 
-function drawVideoCover(targetCtx, width, height) {
-  const videoRatio = video.videoWidth / video.videoHeight;
-  const canvasRatio = width / height;
-  let sourceWidth = video.videoWidth;
-  let sourceHeight = video.videoHeight;
-  let sourceX = 0;
-  let sourceY = 0;
-
-  if (videoRatio > canvasRatio) {
-    sourceWidth = video.videoHeight * canvasRatio;
-    sourceX = (video.videoWidth - sourceWidth) / 2;
-  } else {
-    sourceHeight = video.videoWidth / canvasRatio;
-    sourceY = (video.videoHeight - sourceHeight) / 2;
-  }
-
-  targetCtx.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, width, height);
+function drawVideoCover(targetCtx, width, height, source = getVideoCoverSource(width, height)) {
+  targetCtx.drawImage(video, source.x, source.y, source.width, source.height, 0, 0, width, height);
 }
 
 function applySmileWarp(width, height, landmarks) {
@@ -622,6 +607,37 @@ function getVideoCoverSource(width, height) {
     width: sourceWidth,
     height: sourceHeight
   };
+}
+
+function getActiveVideoSource(width, height) {
+  if (!lastSmileLandmarks || !video.videoWidth || !video.videoHeight) {
+    return getVideoCoverSource(width, height);
+  }
+
+  const facePoints = getFaceVideoPoints();
+  if (facePoints.length < 8) return getVideoCoverSource(width, height);
+
+  const faceBounds = getBounds(facePoints);
+  const faceCenter = {
+    x: faceBounds.x + faceBounds.width / 2,
+    y: faceBounds.y + faceBounds.height / 2
+  };
+  const targetFaceCoverage = 0.76;
+  const canvasRatio = width / height;
+  let sourceHeight = Math.max(faceBounds.height / targetFaceCoverage, faceBounds.width / canvasRatio / targetFaceCoverage);
+  let sourceWidth = sourceHeight * canvasRatio;
+
+  if (sourceWidth > video.videoWidth) {
+    sourceWidth = video.videoWidth;
+    sourceHeight = sourceWidth / canvasRatio;
+  }
+
+  if (sourceHeight > video.videoHeight) {
+    sourceHeight = video.videoHeight;
+    sourceWidth = sourceHeight * canvasRatio;
+  }
+
+  return clampSourceAroundCenter(faceCenter, sourceWidth, sourceHeight);
 }
 
 function drawPiece(piece) {
@@ -827,14 +843,8 @@ function getFacePuzzleLayout() {
   const stageHeight = puzzleStage.clientHeight;
   if (!stageWidth || !stageHeight) return undefined;
 
-  const videoSource = getVideoCoverSource(stageWidth, stageHeight);
-  const videoPoints = faceOval
-    .map((index) => lastSmileLandmarks[index])
-    .filter(Boolean)
-    .map((point) => ({
-      x: point.x * video.videoWidth,
-      y: point.y * video.videoHeight
-    }));
+  const videoSource = getActiveVideoSource(stageWidth, stageHeight);
+  const videoPoints = getFaceVideoPoints();
 
   if (videoPoints.length < 8) return undefined;
 
@@ -860,6 +870,25 @@ function mapStageBoundsToVideo(bounds, videoSource, stageWidth, stageHeight) {
     width: (bounds.width / stageWidth) * videoSource.width,
     height: (bounds.height / stageHeight) * videoSource.height
   };
+}
+
+function getFaceVideoPoints() {
+  if (!lastSmileLandmarks) return [];
+
+  return faceOval
+    .map((index) => lastSmileLandmarks[index])
+    .filter(Boolean)
+    .map((point) => ({
+      x: point.x * video.videoWidth,
+      y: point.y * video.videoHeight
+    }));
+}
+
+function clampSourceAroundCenter(center, width, height) {
+  const x = clamp(center.x - width / 2, 0, Math.max(0, video.videoWidth - width));
+  const y = clamp(center.y - height / 2, 0, Math.max(0, video.videoHeight - height));
+
+  return { x, y, width, height };
 }
 
 function getPieceSourceBounds(row, col, rows, cols, sourceBounds) {
