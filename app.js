@@ -22,6 +22,7 @@ let slots = [];
 let board = { x: 0, y: 0, width: 0, height: 0 };
 let puzzleMaskBounds;
 let puzzleMaskRadius = 0;
+let puzzleMaskPoints = [];
 let draggedPiece;
 let dragOffset = { x: 0, y: 0 };
 let activePointerId;
@@ -96,6 +97,7 @@ function stopWebcam() {
   slots = [];
   puzzleMaskBounds = undefined;
   puzzleMaskRadius = 0;
+  puzzleMaskPoints = [];
   piecesLayer.innerHTML = "";
   slotLayer.innerHTML = "";
   slotLayer.style.clipPath = "";
@@ -130,6 +132,7 @@ function createPuzzle() {
     slots = [];
     slotLayer.innerHTML = "";
     piecesLayer.innerHTML = "";
+    puzzleMaskPoints = [];
     slotLayer.style.clipPath = "";
     pendingFacePuzzle = true;
     statusText.textContent = "Looking for face...";
@@ -139,6 +142,7 @@ function createPuzzle() {
   board = faceLayout?.board || getBoardRect();
   puzzleMaskBounds = faceLayout?.board;
   puzzleMaskRadius = faceLayout ? Math.min(board.width, board.height) * 0.12 : 0;
+  puzzleMaskPoints = faceLayout?.maskPoints || [];
   pieces = [];
   slots = [];
   slotLayer.innerHTML = "";
@@ -563,7 +567,7 @@ function drawPuzzleBackground() {
 
   if (puzzleMaskBounds) {
     puzzleBackgroundCtx.fillStyle = "#000";
-    roundedRectPath(puzzleBackgroundCtx, puzzleMaskBounds.x, puzzleMaskBounds.y, puzzleMaskBounds.width, puzzleMaskBounds.height, puzzleMaskRadius);
+    drawPuzzleMaskPath(puzzleBackgroundCtx);
     puzzleBackgroundCtx.fill();
   }
 }
@@ -757,6 +761,9 @@ function drawPiece(piece) {
   ctx.save();
   drawPiecePath(ctx, piece, tabSize, tabSize);
   ctx.clip();
+  if (piece.placed) {
+    clipPieceToPuzzleMask(ctx, piece);
+  }
   drawVideoCrop(ctx, piece, cssWidth, cssHeight);
   drawPieceMaterial(ctx, piece, tabSize, cssWidth, cssHeight);
   ctx.restore();
@@ -947,8 +954,9 @@ function getFacePuzzleLayout() {
     x: videoFrame.x + ((point.x - videoSource.x) / videoSource.width) * videoFrame.width,
     y: videoFrame.y + ((point.y - videoSource.y) / videoSource.height) * videoFrame.height
   }));
+  const maskPoints = clampPointsToRect(expandPointsFromCenter(visiblePoints, 1.08, 1.06), videoFrame);
 
-  const displayBounds = expandBounds(getBounds(visiblePoints), 0.18, 0.12);
+  const displayBounds = expandBounds(getBounds(maskPoints), 0.08, 0.06);
   const displayBoard = clampBoundsToRect(displayBounds, videoFrame);
   const localBoard = {
     x: displayBoard.x - videoFrame.x,
@@ -960,6 +968,7 @@ function getFacePuzzleLayout() {
 
   return {
     board: displayBoard,
+    maskPoints,
     source: clampBounds(sourceBounds, video.videoWidth, video.videoHeight)
   };
 }
@@ -1036,6 +1045,11 @@ function getPieceSourceBounds(row, col, rows, cols, sourceBounds, tabSize = 0, p
 }
 
 function updateSlotLayerClip() {
+  if (puzzleMaskPoints.length >= 3) {
+    slotLayer.style.clipPath = `polygon(${puzzleMaskPoints.map((point) => `${point.x}px ${point.y}px`).join(", ")})`;
+    return;
+  }
+
   if (!puzzleMaskBounds) {
     slotLayer.style.clipPath = "";
     return;
@@ -1044,6 +1058,45 @@ function updateSlotLayerClip() {
   const right = puzzleStage.clientWidth - puzzleMaskBounds.x - puzzleMaskBounds.width;
   const bottom = puzzleStage.clientHeight - puzzleMaskBounds.y - puzzleMaskBounds.height;
   slotLayer.style.clipPath = `inset(${puzzleMaskBounds.y}px ${right}px ${bottom}px ${puzzleMaskBounds.x}px round ${puzzleMaskRadius}px)`;
+}
+
+function drawPuzzleMaskPath(targetCtx) {
+  if (puzzleMaskPoints.length >= 3) {
+    targetCtx.beginPath();
+    targetCtx.moveTo(puzzleMaskPoints[0].x, puzzleMaskPoints[0].y);
+    for (let index = 1; index < puzzleMaskPoints.length; index += 1) {
+      targetCtx.lineTo(puzzleMaskPoints[index].x, puzzleMaskPoints[index].y);
+    }
+    targetCtx.closePath();
+    return;
+  }
+
+  roundedRectPath(targetCtx, puzzleMaskBounds.x, puzzleMaskBounds.y, puzzleMaskBounds.width, puzzleMaskBounds.height, puzzleMaskRadius);
+}
+
+function clipPieceToPuzzleMask(targetCtx, piece) {
+  if (puzzleMaskPoints.length >= 3) {
+    targetCtx.beginPath();
+    targetCtx.moveTo(puzzleMaskPoints[0].x - piece.x, puzzleMaskPoints[0].y - piece.y);
+    for (let index = 1; index < puzzleMaskPoints.length; index += 1) {
+      targetCtx.lineTo(puzzleMaskPoints[index].x - piece.x, puzzleMaskPoints[index].y - piece.y);
+    }
+    targetCtx.closePath();
+    targetCtx.clip();
+    return;
+  }
+
+  if (puzzleMaskBounds) {
+    roundedRectPath(
+      targetCtx,
+      puzzleMaskBounds.x - piece.x,
+      puzzleMaskBounds.y - piece.y,
+      puzzleMaskBounds.width,
+      puzzleMaskBounds.height,
+      puzzleMaskRadius
+    );
+    targetCtx.clip();
+  }
 }
 
 function roundedRectPath(targetCtx, x, y, width, height, radius) {
@@ -1089,6 +1142,17 @@ function expandBounds(bounds, xPaddingRatio, yPaddingRatio) {
   };
 }
 
+function expandPointsFromCenter(points, scaleX, scaleY) {
+  const bounds = getBounds(points);
+  const centerX = bounds.x + bounds.width / 2;
+  const centerY = bounds.y + bounds.height / 2;
+
+  return points.map((point) => ({
+    x: centerX + (point.x - centerX) * scaleX,
+    y: centerY + (point.y - centerY) * scaleY
+  }));
+}
+
 function clampBounds(bounds, maxWidth, maxHeight) {
   const x = clamp(bounds.x, 0, maxWidth);
   const y = clamp(bounds.y, 0, maxHeight);
@@ -1101,6 +1165,13 @@ function clampBounds(bounds, maxWidth, maxHeight) {
     width: Math.max(1, right - x),
     height: Math.max(1, bottom - y)
   };
+}
+
+function clampPointsToRect(points, rect) {
+  return points.map((point) => ({
+    x: clamp(point.x, rect.x, rect.x + rect.width),
+    y: clamp(point.y, rect.y, rect.y + rect.height)
+  }));
 }
 
 function clampBoundsToRect(bounds, rect) {
