@@ -162,6 +162,11 @@ function createPuzzle() {
       const tabSize = isRectRound ? 0 : Math.min(pieceWidth, pieceHeight) * 0.18;
       const targetX = board.x + colTracks[col].start;
       const targetY = board.y + rowTracks[row].start;
+      const targetRect = { x: targetX, y: targetY, width: pieceWidth, height: pieceHeight };
+      if (puzzleMaskPoints.length >= 3 && !rectIntersectsPolygon(targetRect, puzzleMaskPoints)) {
+        continue;
+      }
+
       const slot = document.createElement("div");
       slot.className = "slot";
       slot.style.left = `${targetX}px`;
@@ -206,6 +211,7 @@ function createPuzzle() {
         targetX: targetX - tabSize,
         targetY: targetY - tabSize,
         assignedSlot: slotData,
+        maskPointsLocal: getPieceMaskPointsLocal(targetX - tabSize, targetY - tabSize),
         sourceBounds: getPieceSourceBounds(
           sourceCell.row,
           sourceCell.col,
@@ -232,7 +238,7 @@ function createPuzzle() {
   if (isRectRound) {
     assignPiecesToRandomSlots();
   } else {
-    scramblePieces();
+    arrangePiecesInTray();
   }
   updateStats();
 }
@@ -320,6 +326,44 @@ function scramblePieces() {
   shuffleZOrder();
   statusText.textContent = "Puzzle scrambled";
   updateStats();
+}
+
+function arrangePiecesInTray() {
+  if (!pieces.length) return;
+
+  const trayBounds = getTrayBounds();
+  const gap = 6;
+
+  for (const piece of pieces) {
+    piece.placed = false;
+    if (piece.assignedSlot) piece.assignedSlot.occupiedBy = undefined;
+    piece.slot.classList.remove("is-filled");
+    piece.canvas.classList.remove("is-placed");
+    piece.canvas.style.zIndex = "2";
+
+    const x = trayBounds.x + piece.col * (piece.pieceWidth + gap);
+    const y = trayBounds.y + piece.row * (piece.pieceHeight + gap);
+    movePiece(piece, x, y);
+  }
+
+  statusText.textContent = "Pieces ready";
+  updateStats();
+}
+
+function getTrayBounds() {
+  const margin = 24;
+  const { rows, cols } = rounds[roundIndex];
+  const pieceWidth = board.width / cols;
+  const pieceHeight = board.height / rows;
+  const gap = 6;
+  const width = cols * pieceWidth + (cols - 1) * gap;
+
+  return {
+    x: Math.max(margin, puzzleStage.clientWidth - width - margin),
+    y: margin,
+    width,
+    height: rows * pieceHeight + (rows - 1) * gap
+  };
 }
 
 function getLoosePiecePosition(piece) {
@@ -761,9 +805,7 @@ function drawPiece(piece) {
   ctx.save();
   drawPiecePath(ctx, piece, tabSize, tabSize);
   ctx.clip();
-  if (piece.placed) {
-    clipPieceToPuzzleMask(ctx, piece);
-  }
+  clipPieceToLocalMask(ctx, piece);
   drawVideoCrop(ctx, piece, cssWidth, cssHeight);
   drawPieceMaterial(ctx, piece, tabSize, cssWidth, cssHeight);
   ctx.restore();
@@ -775,6 +817,7 @@ function drawPieceMaterial(targetCtx, piece, tabSize, drawWidth, drawHeight) {
   targetCtx.save();
   drawPiecePath(targetCtx, piece, tabSize, tabSize);
   targetCtx.clip();
+  clipPieceToLocalMask(targetCtx, piece);
 
   const bevel = targetCtx.createLinearGradient(0, 0, drawWidth, drawHeight);
   bevel.addColorStop(0, "rgba(255, 255, 255, 0.34)");
@@ -1074,6 +1117,27 @@ function drawPuzzleMaskPath(targetCtx) {
   roundedRectPath(targetCtx, puzzleMaskBounds.x, puzzleMaskBounds.y, puzzleMaskBounds.width, puzzleMaskBounds.height, puzzleMaskRadius);
 }
 
+function getPieceMaskPointsLocal(pieceX, pieceY) {
+  if (puzzleMaskPoints.length < 3) return [];
+
+  return puzzleMaskPoints.map((point) => ({
+    x: point.x - pieceX,
+    y: point.y - pieceY
+  }));
+}
+
+function clipPieceToLocalMask(targetCtx, piece) {
+  if (!piece.maskPointsLocal?.length) return;
+
+  targetCtx.beginPath();
+  targetCtx.moveTo(piece.maskPointsLocal[0].x, piece.maskPointsLocal[0].y);
+  for (let index = 1; index < piece.maskPointsLocal.length; index += 1) {
+    targetCtx.lineTo(piece.maskPointsLocal[index].x, piece.maskPointsLocal[index].y);
+  }
+  targetCtx.closePath();
+  targetCtx.clip();
+}
+
 function clipPieceToPuzzleMask(targetCtx, piece) {
   if (puzzleMaskPoints.length >= 3) {
     targetCtx.beginPath();
@@ -1190,6 +1254,55 @@ function clampBoundsToRect(bounds, rect) {
 
 function rectsOverlap(a, b) {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+function rectIntersectsPolygon(rect, polygon) {
+  const rectPoints = [
+    { x: rect.x, y: rect.y },
+    { x: rect.x + rect.width, y: rect.y },
+    { x: rect.x + rect.width, y: rect.y + rect.height },
+    { x: rect.x, y: rect.y + rect.height },
+    { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+  ];
+
+  if (rectPoints.some((point) => pointInPolygon(point, polygon))) return true;
+  if (polygon.some((point) => point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height)) return true;
+
+  for (let index = 0; index < polygon.length; index += 1) {
+    const nextIndex = (index + 1) % polygon.length;
+    for (let rectIndex = 0; rectIndex < 4; rectIndex += 1) {
+      const rectNextIndex = (rectIndex + 1) % 4;
+      if (segmentsIntersect(polygon[index], polygon[nextIndex], rectPoints[rectIndex], rectPoints[rectNextIndex])) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function pointInPolygon(point, polygon) {
+  let inside = false;
+  for (let index = 0, prev = polygon.length - 1; index < polygon.length; prev = index, index += 1) {
+    const currentPoint = polygon[index];
+    const previousPoint = polygon[prev];
+    const crosses = currentPoint.y > point.y !== previousPoint.y > point.y;
+    if (crosses) {
+      const xAtY = ((previousPoint.x - currentPoint.x) * (point.y - currentPoint.y)) / (previousPoint.y - currentPoint.y) + currentPoint.x;
+      if (point.x < xAtY) inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
+function segmentsIntersect(a, b, c, d) {
+  const denominator = (d.y - c.y) * (b.x - a.x) - (d.x - c.x) * (b.y - a.y);
+  if (denominator === 0) return false;
+
+  const ua = ((d.x - c.x) * (a.y - c.y) - (d.y - c.y) * (a.x - c.x)) / denominator;
+  const ub = ((b.x - a.x) * (a.y - c.y) - (b.y - a.y) * (a.x - c.x)) / denominator;
+  return ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1;
 }
 
 function isNearTarget(piece, x, y) {
