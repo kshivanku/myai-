@@ -152,7 +152,7 @@ function createPuzzle() {
   const colTracks = createUniformTracks(cols, board.width);
   const rowTracks = createUniformTracks(rows, board.height);
   const edges = createEdges(rows, cols);
-  const sourceCells = createEyeSwappedSourceCells(rows, cols);
+  const sourceCells = createOrderedSourceCells(rows, cols);
 
   for (let row = 0; row < rows; row += 1) {
     for (let col = 0; col < cols; col += 1) {
@@ -270,7 +270,7 @@ function createUniformTracks(count, totalSize) {
   }));
 }
 
-function createEyeSwappedSourceCells(rows, cols) {
+function createOrderedSourceCells(rows, cols) {
   const cells = [];
   for (let row = 0; row < rows; row += 1) {
     for (let col = 0; col < cols; col += 1) {
@@ -278,29 +278,7 @@ function createEyeSwappedSourceCells(rows, cols) {
     }
   }
 
-  if (cells.length < 2) return cells;
-
-  const swapped = [...cells];
-  const eyeCandidates = cells
-    .map((cell, index) => ({ ...cell, index }))
-    .filter((cell) => {
-      const rowRatio = (cell.row + 0.5) / rows;
-      const colRatio = (cell.col + 0.5) / cols;
-      return rowRatio >= 0.22 && rowRatio <= 0.55 && colRatio >= 0.14 && colRatio <= 0.86;
-    });
-  const candidates = eyeCandidates.length >= 2 ? eyeCandidates : cells.map((cell, index) => ({ ...cell, index }));
-  const first = candidates[Math.floor(Math.random() * candidates.length)];
-  const nearby = candidates.filter((cell) => cell.index !== first.index && Math.abs(cell.row - first.row) <= 1);
-  const secondOptions = nearby.length ? nearby : candidates.filter((cell) => cell.index !== first.index);
-  const second = secondOptions[Math.floor(Math.random() * secondOptions.length)];
-  const firstIndex = first.index;
-  let secondIndex = second.index;
-  while (secondIndex === firstIndex) {
-    secondIndex = Math.floor(Math.random() * swapped.length);
-  }
-
-  [swapped[firstIndex], swapped[secondIndex]] = [swapped[secondIndex], swapped[firstIndex]];
-  return swapped;
+  return cells;
 }
 
 function scramblePieces() {
