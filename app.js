@@ -310,7 +310,7 @@ function arrangePiecesInTray() {
   if (!pieces.length) return;
 
   const trayBounds = getTrayBounds();
-  const gap = 6;
+  const gap = 0;
 
   for (const piece of pieces) {
     piece.placed = false;
@@ -333,7 +333,7 @@ function getTrayBounds() {
   const { rows, cols } = rounds[roundIndex];
   const pieceWidth = board.width / cols;
   const pieceHeight = board.height / rows;
-  const gap = 6;
+  const gap = 0;
   const width = cols * pieceWidth + (cols - 1) * gap;
 
   return {
